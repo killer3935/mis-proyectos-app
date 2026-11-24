@@ -76,7 +76,7 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} }
 };
-const cfg = () => ({ owner: store.get('owner'), repo: store.get('repo') || 'mis-proyectos', token: store.get('token') });
+const cfg = () => ({ owner: store.get('owner') || 'killer3935', repo: store.get('repo') || 'mis-proyectos', token: store.get('token') });
 let projects = [];
 
 function show(view) {
