@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<title>Mis proyectos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #14161c; --card: #1f232c; --card2: #262b36; --text: #eef0f4; --muted: #9aa1ad;
+    --accent: #4f8cff; --ok: #3ecf8e; --warn: #ffb547; --line: #2f3542;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 14px; }
+  h1 { font-size: 24px; margin: 0; }
+  .icon-btn { background: none; border: 0; color: var(--muted); font-size: 22px; padding: 8px; cursor: pointer; }
+  .list { display: grid; gap: 14px; }
+  .proj { width: 100%; text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--line);
+    border-radius: 18px; padding: 20px; cursor: pointer; display: grid; gap: 10px; }
+  .proj:active { background: var(--card2); }
+  .proj .name { font-size: 21px; font-weight: 650; }
+  .proj .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
+  .pill { border-radius: 999px; padding: 5px 12px; font-weight: 600; font-size: 15px; background: rgba(255,181,71,.15); color: var(--warn); }
+  .pill.zero { background: rgba(62,207,142,.15); color: var(--ok); }
+  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--ok); }
+  .msg { color: var(--muted); text-align: center; padding: 30px 10px; }
+  .err { color: #ff7a7a; }
+  .back { color: var(--accent); background: none; border: 0; font-size: 16px; padding: 8px 0; cursor: pointer; }
+  .desc { color: var(--muted); margin: 4px 0 18px; }
+  h2 { font-size: 17px; margin: 22px 0 10px; }
+  .item { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; border-left: 4px solid var(--warn); }
+  .item.done { border-left-color: var(--ok); }
+  .item b { display: block; margin-bottom: 2px; }
+  .item span { color: var(--muted); font-size: 14px; }
+  form { display: grid; gap: 12px; background: var(--card); padding: 18px; border-radius: 16px; }
+  label { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+  input { font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%; }
+  .primary { font: inherit; font-weight: 600; padding: 13px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+  small { color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Mis proyectos</h1>
+  <div>
+    <button class="icon-btn" id="reload" title="Actualizar" aria-label="Actualizar">⟳</button>
+    <button class="icon-btn" id="settings" title="Ajustes" aria-label="Ajustes">⚙</button>
+  </div>
+</header>
+
+<main id="home"><div class="list" id="list"></div><p class="msg" id="status"></p></main>
+
+<main id="detail" hidden></main>
+
+<main id="setup" hidden>
+  <form id="setupForm">
+    <label>Usuario de GitHub <input id="owner" autocomplete="off" autocapitalize="off" required></label>
+    <label>Repositorio <input id="repo" value="mis-proyectos" autocomplete="off" autocapitalize="off" required></label>
+    <label>Token de GitHub (solo lectura) <input id="token" type="password" autocomplete="off" required></label>
+    <small>El token se guarda solo en este teléfono. Créalo en GitHub ▸ Settings ▸ Developer settings ▸ Fine-grained tokens, con acceso solo al repositorio mis-proyectos y permiso Contents: Read-only.</small>
+    <button class="primary" type="submit">Guardar</button>
+  </form>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+};
+const cfg = () => ({ owner: store.get('owner'), repo: store.get('repo') || 'mis-proyectos', token: store.get('token') });
+let projects = [];
+
+function show(view) {
+  for (const v of ['home', 'detail', 'setup']) $(v).hidden = v !== view;
+  $('title').textContent = view === 'setup' ? 'Ajustes' : 'Mis proyectos';
+  window.scrollTo(0, 0);
+}
+
+async function gh(path, raw) {
+  const { owner, repo, token } = cfg();
+  const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?t=${Date.now()}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json' },
+    cache: 'no-store'
+  });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Token no válido' : r.status === 404 ? 'No encontré el repositorio' : 'Error ' + r.status);
+  return r.json();
+}
+
+function fmtDate(s) {
+  if (!s) return 'sin fecha';
+  const d = new Date(s.length <= 10 ? s + 'T12:00:00' : s);
+  return isNaN(d) ? s : d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderList() {
+  $('list').innerHTML = projects.map((p, i) => {
+    const hecho = (p.hecho || []).length, falta = (p.falta || []).length;
+    const pct = hecho + falta ? Math.round(hecho * 100 / (hecho + falta)) : 0;
+    return `<button class="proj" data-i="${i}">
+      <span class="name">${esc(p.nombre || p._dir)}</span>
+      <span class="row"><span class="pill ${falta ? '' : 'zero'}">${falta ? falta + (falta === 1 ? ' tarea falta' : ' tareas faltan') : 'Todo hecho'}</span>
+        <span>Actualizado ${esc(fmtDate(p.actualizado))}</span></span>
+      <span class="bar"><i style="width:${pct}%"></i></span>
+    </button>`;
+  }).join('');
+}
+
+function renderDetail(p) {
+  const items = (arr, done) => (arr || []).map(x => `<div class="item ${done ? 'done' : ''}"><b>${esc(x.titulo)}</b><span>${esc(x.descripcion)}</span></div>`).join('') || '<p class="msg">Nada</p>';
+  $('detail').innerHTML = `<button class="back" id="back">‹ Volver</button>
+    <h1>${esc(p.nombre || p._dir)}</h1><p class="desc">${esc(p.descripcion)}<br><small>Actualizado ${esc(fmtDate(p.actualizado))}</small></p>
+    <h2>Falta (${(p.falta || []).length})</h2>${items(p.falta, false)}
+    <h2>Hecho (${(p.hecho || []).length})</h2>${items(p.hecho, true)}`;
+  $('back').onclick = () => history.back();
+  show('detail');
+}
+
+async function load() {
+  const { owner, token } = cfg();
+  if (!owner || !token) { openSetup(); return; }
+  show('home');
+  const cached = store.get('cache');
+  if (cached && !projects.length) { projects = JSON.parse(cached); renderList(); }
+  $('status').textContent = 'Actualizando…'; $('status').className = 'msg';
+  try {
+    const dirs = (await gh('')).filter(x => x.type === 'dir');
+    const list = await Promise.all(dirs.map(d => gh(d.name + '/estado.json', true).then(j => ({ ...j, _dir: d.name })).catch(() => null)));
+    projects = list.filter(Boolean);
+    store.set('cache', JSON.stringify(projects));
+    renderList();
+    $('status').textContent = projects.length ? '' : 'No hay proyectos con estado.json.';
+  } catch (e) {
+    $('status').textContent = (projects.length ? 'Sin conexión: mostrando lo último guardado. ' : '') + e.message;
+    $('status').className = 'msg err';
+  }
+}
+
+function openSetup() {
+  const c = cfg();
+  $('owner').value = c.owner || ''; $('repo').value = c.repo; $('token').value = c.token || '';
+  show('setup');
+}
+
+$('list').onclick = e => {
+  const b = e.target.closest('.proj'); if (!b) return;
+  history.pushState({ d: 1 }, ''); renderDetail(projects[b.dataset.i]);
+};
+window.onpopstate = () => show('home');
+$('reload').onclick = load;
+$('settings').onclick = openSetup;
+$('setupForm').onsubmit = e => {
+  e.preventDefault();
+  store.set('owner', $('owner').value.trim()); store.set('repo', $('repo').value.trim()); store.set('token', $('token').value.trim());
+  projects = []; load();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('home').hidden) load(); });
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+load();
+</script>
+</body>
+</html>
